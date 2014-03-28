@@ -56,8 +56,13 @@ pthread_mutex_t rk = PTHREAD_MUTEX_INITIALIZER;
 /* mutex for modifying escape variable */
 pthread_mutex_t es = PTHREAD_MUTEX_INITIALIZER;
 
-/* mutex for decreasing number of rockets*/
+/* mutex for decreasing/ increasing the number of rockets*/
 pthread_mutex_t dc = PTHREAD_MUTEX_INITIALIZER;
+
+/* mutex for increasing score*/
+pthread_mutex_t sc = PTHREAD_MUTEX_INITIALIZER;
+
+int score = 0;
 
 int escape = 0;
 
@@ -65,11 +70,45 @@ int level = 1;
 
 int rockets = 10;
 
+int limit = 10;
+
+int reward = 1;
+
 pthread_t thrds[5];
 
 struct saucer saucer[5];
 
 struct baseline base;
+
+int getLimit(int level){
+        switch (level){
+        case 2:
+                return 15;
+        case 3:
+                return 25;
+        case 4:
+                return 35;
+        case 5:
+                return 50;
+        default:
+                return 10;
+        }
+}
+
+int getReward(int level){
+        switch (level){
+        case 2:
+                return 2;
+        case 3:
+                return 3;
+        case 4:
+                return 5;
+        case 5:
+                return 10;
+        default:
+                return 1;
+        }
+}
 
 void printInstruction()
 {
@@ -83,9 +122,7 @@ void printUserMenu()
         printf("================================\n");
         printf("|    Start Game (S)            |\n");
         printf("+------------------------------+\n");
-        printf("|    Instruction (I)           |\n");
-        printf("+------------------------------+\n");
-        printf("|    Quit        (Q)           |\n");
+        printf("|        Quit   (Q)            |\n");
         printf("================================\n");
         return;
 }
@@ -127,107 +164,40 @@ void moveLeft()
         return;
 }
 
-int main()
+void updateStatus()
 {
-	int c;		
-	/* the functions		*/
-	void *attack();
-        void *fire();
-	int num_msg ;
-	int i;
-        
-        printUserMenu();
-        
-        while((c = getchar()) != EOF){
-            if (c <= 0)
-                    c = getch();
-            if(c == 'Q') 
-                    return 0;
-            else if(c == 'S') 
-                    break;
-            else if(c == 'I')
-                    printInstruction();
-            else{
-                    printf("Please try again!\n");
-                    c = getchar();
-            }
-        }
-
-
-	num_msg = setup(saucer);
-
-	/* create all the threads */
-	for(i=0 ; i<num_msg; i++)
-		if ( pthread_create(&thrds[i], NULL, attack, &saucer[i])){
-                    fprintf(stderr,"error creating thread");
-                    endwin();
-                    exit(0);
-                }
-
-        base.col = (COLS+1)/2;
-
-	/* process user input */
-	while(1) {
-
-            c = getch();
-            if ( c == 'Q' ) break;
-
-            else if ( c == '.'){
-                moveRight();
-
-            }else if ( c == ','){
-                moveLeft();
-
-            }else if (c == 32){
-                struct rocket *rocket = malloc(sizeof(rocket));
-                pthread_t *rocket_thread = malloc(sizeof(pthread_t));
-                rocket->speed = 8;
-                rocket->row = LINES - 3;
-                rocket->col = base.col;
-                if ( pthread_create(rocket_thread, NULL, fire, rocket)){
-                    fprintf(stderr,"error creating thread");
-                    endwin();
-                    exit(0);
-                }
-                pthread_mutex_lock(&mx);
-                pthread_mutex_lock(&dc);
-                rockets--;
-                pthread_mutex_unlock(&dc);
-                //pthread_mutex_lock(&es);
-                //mvprintw(LINES-1,0,"Quit(Q), Left(,), Right(.), Fire(SPACE). Rockets: %d Score: 0 Escape:%d", rockets, escape);
-                //pthread_mutex_unlock(&es);
-                refresh();
-                pthread_mutex_unlock(&mx);
-                        
-            }
-
-	}
-
-	/* cancel all the threads */
-	pthread_mutex_lock(&mx);
-	for (i=0; i<num_msg; i++ )
-		pthread_cancel(thrds[i]);
-	endwin();
-	return 0;
+        pthread_mutex_lock(&dc);
+        pthread_mutex_lock(&sc);
+        pthread_mutex_lock(&es);
+        pthread_mutex_lock(&mx);
+        mvprintw(LINES-1,
+                 0,
+                 "Quit(Q), Left(,), Right(.), Fire(SPACE)." 
+                 " Rockets: %d Score:%d Escape:%d",
+                 rockets, score, escape);
+        refresh();
+        pthread_mutex_unlock(&mx);
+        pthread_mutex_unlock(&es);
+        pthread_mutex_unlock(&sc);
+        pthread_mutex_unlock(&dc);
+        return;
 }
 
 int setup(struct saucer saucer[])
 {
-
 	/* assign rows and velocities to each string */
 	srand(getpid());
 	for(int i=0 ; i<NUMS; i++){
-            saucer[i].str = "<--->";	/* the message	*/
-            saucer[i].row = rand()%3;		/* the row	*/
+            saucer[i].str = "<--->";
+            saucer[i].row = rand()%3;		
             saucer[i].col = 0;
             saucer[i].hit = 0;
-            saucer[i].delay = 30 + (rand()%15);	/* a speed	*/
-            saucer[i].dir = 1;	/* +1 or -1	*/
+            saucer[i].delay = 25 + (rand()%15);	
+            saucer[i].dir = 1;
 	}
         
         srand(getpid());
-        
-        
+               
 	/* set up curses */
 	initscr();
 	crmode();
@@ -239,65 +209,83 @@ int setup(struct saucer saucer[])
         addch(' ');
         move(LINES-1, COLS-1);
         refresh();
-	mvprintw(LINES-1,0,"Quit(Q), Left(,), Right(.), Fire(SPACE). Rockets: 0 Score:0 Escape:0");
-        
+	mvprintw(LINES-1,
+                 0,
+                 "Quit(Q), Left(,), Right(.), Fire(SPACE)."
+                 " Rockets: 10 Score:0 Escape:0");
+        base.col = (COLS+1)/2; 
 	return NUMS;
+}
+
+void moveRocket(struct rocket *rocket)
+{
+        pthread_mutex_lock(&mx);
+        move( rocket->row, rocket->col);
+        addch(' ');
+        addch(' ');
+        if(rocket->row - 1 >= 0){
+            move(rocket->row - 1, rocket->col);
+            addch('^');
+            addch(' ');
+        }
+        pthread_mutex_unlock(&mx);
+        return;
+}
+
+void disposeRocket(struct rocket *rocket)
+{
+        move( rocket->row, rocket->col);
+        addch(' ');
+        move( rocket->row - 1, rocket->col);
+        addch(' ');
+        rocket->row = -1;
+        return;
 }
 
 void *fire(void *arg)
 {
         struct rocket *rocket = arg;
-
         int dispose = 0;
+        int countHits = 0;
 
         while (rocket->row >= 0){
             usleep(rocket->speed*TUNIT);
-
-            pthread_mutex_lock(&mx);
-            move( rocket->row, rocket->col);
-            addch(' ');
-            addch(' ');
-            if(rocket->row - 1 >= 0){
-                move(rocket->row - 1, rocket->col);
-                addch('^');
-                addch(' ');
-            }
-            pthread_mutex_unlock(&mx);
+            moveRocket(rocket);
 
             if(rocket->row < 3){
                 for(int i = 0; i < NUMS; i++){
                     pthread_mutex_lock(&rk);
                     if(saucer[i].row == rocket->row 
                        && rocket->col >= saucer[i].col - 1 
-                       && rocket->col <= saucer[i].col + strlen(saucer[i].str) - 1){
-                        /*
-                        pthread_mutex_lock(&mx);
-                        mvprintw(LINES-1, 0, "current status: rocket: (%d, %d) saucer (%d %d)", rocket->row, rocket->col, saucer[i].row, saucer[i].col);
-                        pthread_mutex_unlock(&mx);
-                        */
+                       && rocket->col <= 
+                       saucer[i].col + strlen(saucer[i].str) - 1){
                         saucer[i].hit = 1;
                         dispose = 1;
+                        countHits++;
                     }
                     pthread_mutex_unlock(&rk); 
                 }
             }
 
-            pthread_mutex_lock(&mx);
-            if(dispose){
-                move( rocket->row, rocket->col);
-                addch(' ');
-                move( rocket->row - 1, rocket->col);
-                addch(' ');
-                rocket->row = -1;
+            if(countHits){
+                pthread_mutex_lock(&sc);
+                score += countHits;
+                pthread_mutex_unlock(&sc);
+                pthread_mutex_lock(&dc);
+                rockets += reward;
+                pthread_mutex_unlock(&dc);
+                updateStatus();
             }
+
+            pthread_mutex_lock(&mx);
+            if(dispose)
+                    disposeRocket(rocket);
             move(LINES-1,COLS-1);
             refresh();		
             pthread_mutex_unlock(&mx);
             rocket->row--;
-        }
-        
+        }        
         pthread_exit(NULL);
-
 }
 
 void spawn(struct saucer *info)
@@ -307,7 +295,7 @@ void spawn(struct saucer *info)
         if(info->hit){
             info->hit = 0;
             pthread_mutex_lock(&mx);
-            info->str = "         ";
+            info->str = "       ";
             move( info->row, info->col );
             addch(' ');
             addstr(info->str);
@@ -318,7 +306,8 @@ void spawn(struct saucer *info)
         }else{
             pthread_mutex_lock(&es);
             escape++;
-            pthread_mutex_unlock(&es);
+            pthread_mutex_lock(&dc);
+            updateStatus();
         }
         
         info->col = 0;
@@ -404,4 +393,73 @@ void *attack(void *arg)
             pthread_mutex_unlock(&rk);
             
 	}
+}
+
+
+int main()
+{
+	int c;		
+	int num_msg ;
+	int i;
+
+        printUserMenu();
+        printInstruction();
+
+        while((c = getchar()) != EOF){
+            if(c == 'Q') 
+                    return 0;
+            else if(c == 'S') 
+                    break;
+            else{
+                    printf("Please try again!\n");
+            }
+        }
+
+	num_msg = setup(saucer);
+
+	/* create all the threads */
+	for(i=0 ; i<num_msg; i++)
+		if ( pthread_create(&thrds[i], NULL, attack, &saucer[i])){
+                    fprintf(stderr,"error creating thread");
+                    endwin();
+                    exit(0);
+                }
+
+	/* process user input */
+	while(1) {
+
+            c = getch();
+            if ( c == 'Q' ) break;
+
+            else if ( c == '.'){
+                moveRight();
+
+            }else if ( c == ','){
+                moveLeft();
+
+            }else if (c == 32){
+                struct rocket *rocket = malloc(sizeof(rocket));
+                pthread_t *rocket_thread = malloc(sizeof(pthread_t));
+                rocket->speed = 8;
+                rocket->row = LINES - 3;
+                rocket->col = base.col;
+                if ( pthread_create(rocket_thread, NULL, fire, rocket)){
+                    fprintf(stderr,"error creating thread");
+                    endwin();
+                    exit(0);
+                }
+                pthread_mutex_lock(&dc);
+                rockets--;
+                pthread_mutex_unlock(&dc);
+                updateStatus();
+            }
+
+	}
+
+	/* cancel all the threads */
+	pthread_mutex_lock(&mx);
+	for (i=0; i<num_msg; i++ )
+		pthread_cancel(thrds[i]);
+	endwin();
+	return 0;
 }
