@@ -38,7 +38,7 @@ int getLimit(int level)
         case 5:
                 return 45;
         default:
-                return 55;
+                return -1;
         }
 }
 
@@ -247,8 +247,17 @@ int levelup(struct saucer saucer[])
         mvprintw(5,0," #       #        #   #  #       #          #     # #"); 
         mvprintw(6,0," #       #         # #   #       #          #     # # ");  
         mvprintw(7,0," ####### #######    #    ####### #######     #####  #");
-        mvprintw(8,0,"LEVEL %d. MAX ESCAPE: %d. SCORE TO NEXT LEVEL: %d", 
-             level, limit, requiredScore);
+        mvprintw(8,0,"LEVEL %d. MAX ESCAPE: %d. THE SCORE TO THE NEXT LEVEL: %d"
+                 , level, limit, requiredScore);
+
+        if(level == 6){
+            mvprintw(9, 0, "WELCOME TO LEVEL 6. LOOKS LIKE NO ONE HAS EVER"
+                     " MADE IT HERE! CONGRATS! ");
+            mvprintw(10, 0, "THERE WILL BE NO LEVELS ANY MORE"
+                     ". LEVEL 6 IS A FREE PLAY MODE. THE GAME WILL ONLY"
+                     " TERMINATE AS SOON AS YOU RUN OF OUT ROCKETS.");
+        }
+
         refresh();
         sleep(4);
 
@@ -461,15 +470,17 @@ int gameOn(){
 
             pthread_mutex_lock(&dc);
             pthread_mutex_lock(&es);
-            if(rockets == 0 || escape >= limit){
+            if(rockets == 0 || (limit > 0 && escape >= limit)){
                 over = 1;
                 break;
             }
+
             pthread_mutex_unlock(&es);
             pthread_mutex_unlock(&dc);
 
+            
             pthread_mutex_lock(&sc);
-            if(score >= requiredScore){
+            if(level < 6 && score >= requiredScore){
                 level++;
                 done = 0;
                 break;
@@ -499,7 +510,7 @@ int gameOn(){
                     endwin();
                     exit(0);
                 }
-
+                
                 pthread_mutex_lock(&dc);
                 rockets--;
                 pthread_mutex_unlock(&dc);
@@ -507,7 +518,11 @@ int gameOn(){
             }
 
 	}
-        
+
+        /* When the code breaks from while loop, these three
+         * mutexes may be still locked. So doing the unlock
+         * steps just to be safe.
+         */
         pthread_mutex_unlock(&es);
         pthread_mutex_unlock(&dc);
         pthread_mutex_unlock(&sc);
@@ -534,7 +549,8 @@ int main()
                     printf("Please try again!\n");
             }
         }
-/* SINGLE LEVEL HERE:
+        
+        /* SINGLE LEVEL HERE:
         num_msg = setup(saucer);
         for(i=0 ; i<num_msg; i++)
                 if ( pthread_create(&thrds[i], NULL, attack, &saucer[i])){
