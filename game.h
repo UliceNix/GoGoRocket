@@ -9,7 +9,7 @@
 
 #define ROWS    3
 #define NUMS    5
-#define RANGE   25
+#define RANGE   30
 #define	TUNIT   20000		
 
 struct	saucer {

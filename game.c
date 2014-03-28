@@ -30,11 +30,11 @@ int getLimit(int level)
 {
         switch (level){
         case 2:
-                return 15;
+                return 10;
         case 3:
-                return 25;
+                return 18;
         case 4:
-                return 35;
+                return 30;
         case 5:
                 return 45;
         default:
@@ -46,15 +46,15 @@ int getReward(int level)
 {
         switch (level){
         case 2:
-                return 2;
+                return 1;
         case 3:
-                return 3;
+                return 1;
         case 4:
-                return 5;
+                return 1;
         case 5:
-                return 10;
+                return 2;
         default:
-                return 8;
+                return 4;
         }
 }
 
@@ -289,13 +289,6 @@ void moveRocket(struct rocket *rocket)
         pthread_mutex_lock(&mx);
         move( rocket->row, rocket->col);
         addch(' ');
-        //addch(' ');
-        /*
-        if(rocket->row - 1 >= 0){
-            move(rocket->row - 1, rocket->col);
-            addch('^');
-            addch(' ');
-            }*/
         refresh();
         pthread_mutex_unlock(&mx);
         return;
@@ -308,7 +301,6 @@ void disposeRocket(struct rocket *rocket)
         
         move( rocket->row - 1, rocket->col);
         addch(' ');
-        //rocket->row = -1;
         return;
 }
 
@@ -317,7 +309,7 @@ void hitReward(int countHits){
         score += countHits * countHits;
         pthread_mutex_unlock(&sc);
         pthread_mutex_lock(&dc);
-        rockets += reward * countHits;
+        rockets += reward * (countHits % 3);
         pthread_mutex_unlock(&dc);
         updateStatus();
         return;
