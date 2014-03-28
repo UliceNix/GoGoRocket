@@ -76,13 +76,13 @@ int getDelay(int level)
 {
         switch (level){
         case 2:
-                return 12;
+                return 10;
         case 3:
-                return 8;
+                return 7;
         case 4:
-                return 6;
+                return 5;
         default:
-                return 4;
+                return 2;
         }
 
 }
@@ -193,7 +193,7 @@ int setup(struct saucer saucer[])
             saucer[i].row = rand()%ROWS;		
             saucer[i].col = 0;
             saucer[i].hit = 0;
-            saucer[i].delay = 15 + (rand()%15);	
+            saucer[i].delay = 15 + (rand()%RANGE);	
             saucer[i].dir = 1;
 	}
         
@@ -224,7 +224,11 @@ int setup(struct saucer saucer[])
 int levelup(struct saucer saucer[])
 {
         srand(getpid());
-
+        
+        /* Since when doing the levelup process, all the threads that 
+         * executes gameOn() are all terminated. There will not be any
+         * processes modifying the level variable.
+         */
         updateSetting(level);
         
         for(int i=0 ; i<NUMS; i++){
@@ -232,7 +236,7 @@ int levelup(struct saucer saucer[])
             saucer[i].row = rand()%ROWS;		
             saucer[i].col = 0;
             saucer[i].hit = 0;
-            saucer[i].delay = delay + (rand()%15);	
+            saucer[i].delay = delay + (rand()%RANGE);	
             saucer[i].dir = 1;
 	}
 
@@ -285,12 +289,14 @@ void moveRocket(struct rocket *rocket)
         pthread_mutex_lock(&mx);
         move( rocket->row, rocket->col);
         addch(' ');
-        addch(' ');
+        //addch(' ');
+        /*
         if(rocket->row - 1 >= 0){
             move(rocket->row - 1, rocket->col);
             addch('^');
             addch(' ');
-        }
+            }*/
+        refresh();
         pthread_mutex_unlock(&mx);
         return;
 }
@@ -299,9 +305,10 @@ void disposeRocket(struct rocket *rocket)
 {
         move( rocket->row, rocket->col);
         addch(' ');
+        
         move( rocket->row - 1, rocket->col);
         addch(' ');
-        rocket->row = -1;
+        //rocket->row = -1;
         return;
 }
 
@@ -347,6 +354,13 @@ void *fire(void *arg)
             pthread_mutex_lock(&mx);
             if(dispose)
                     disposeRocket(rocket);
+            else{
+                if(rocket->row - 1 >= 0){
+                    move(rocket->row - 1, rocket->col);
+                    addch('^');
+                    addch(' ');
+                }
+            }
             move(LINES-1,COLS-1);
             refresh();		
             pthread_mutex_unlock(&mx);
@@ -381,10 +395,10 @@ void spawn(struct saucer *info)
         info->row = rand()%ROWS;
         pthread_mutex_unlock(&rk);
         
-        usleep(info->delay * (rand()%20) * TUNIT);
+        usleep(info->delay * (rand()%RANGE) * TUNIT);
         
         info->str = "<--->";
-        info->delay = delay + (rand()%15);
+        info->delay = delay + (rand()%RANGE);
 
 }
 
@@ -447,7 +461,7 @@ void *attack(void *arg)
             if ( info->col + len >= COLS && vanished < 5) 
                     vanished = vanish(info, vanished);
             
-            if(vanished == 5){
+            if(vanished >= 5){
                 spawn(info);
                 vanished = 0;
             }
@@ -462,11 +476,51 @@ void *attack(void *arg)
 	}
 }
 
+
+void lockEverything()
+{
+        pthread_mutex_lock(&mx);
+        pthread_mutex_lock(&rk);
+        pthread_mutex_lock(&es);
+        pthread_mutex_lock(&dc);
+        pthread_mutex_lock(&sc);
+        pthread_mutex_lock(&lv);
+        gamepause = 1;
+}
+
+void unlockEverything(){
+        pthread_mutex_unlock(&mx);
+        pthread_mutex_unlock(&rk);
+        pthread_mutex_unlock(&es);
+        pthread_mutex_unlock(&dc);
+        pthread_mutex_unlock(&sc);
+        pthread_mutex_unlock(&lv);
+        gamepause = 0;
+
+}
+
 int gameOn(){
 	int c;
         int over = 0;
 	/* process user input */
 	while(1) {
+            
+            c = getch();
+            
+            if ( c == 'Q' ) break;
+            
+            else if (c == 'P' && !gamepause){
+                    lockEverything();
+                    continue;
+            }
+            else if (c == 'R' && gamepause){
+                unlockEverything();
+                continue;
+            }
+            
+            if(gamepause)
+                    continue;
+            
 
             pthread_mutex_lock(&dc);
             pthread_mutex_lock(&es);
@@ -480,24 +534,22 @@ int gameOn(){
 
             
             pthread_mutex_lock(&sc);
+            pthread_mutex_lock(&lv);
             if(level < 6 && score >= requiredScore){
                 level++;
                 done = 0;
                 break;
             }
             pthread_mutex_unlock(&sc);
-  
-            c = getch();
+            pthread_mutex_unlock(&lv);
 
-            if ( c == 'Q' ) break;
+            if ( c == '.')
+                    moveRight();
+            
+            else if ( c == ',')
+                    moveLeft();
 
-            else if ( c == '.'){
-                moveRight();
-
-            }else if ( c == ','){
-                moveLeft();
-
-            }else if (c == 32){
+            else if (c == 32){
                 struct rocket *rocket = malloc(sizeof(rocket));
                 pthread_t *rocket_thread = malloc(sizeof(pthread_t));
 
@@ -526,6 +578,7 @@ int gameOn(){
         pthread_mutex_unlock(&es);
         pthread_mutex_unlock(&dc);
         pthread_mutex_unlock(&sc);
+        pthread_mutex_unlock(&lv);
 
         return over;
 }

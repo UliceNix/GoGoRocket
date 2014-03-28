@@ -7,9 +7,10 @@
 #include	<unistd.h>
 #include	<string.h>
 
-#define ROWS    5
-#define NUMS    7
-#define	TUNIT   20000		/* timeunits in microseconds */
+#define ROWS    3
+#define NUMS    5
+#define RANGE   25
+#define	TUNIT   20000		
 
 struct	saucer {
         char *str;	
@@ -47,6 +48,9 @@ pthread_mutex_t dc = PTHREAD_MUTEX_INITIALIZER;
 /* mutex for increasing score*/
 pthread_mutex_t sc = PTHREAD_MUTEX_INITIALIZER;
 
+/* mutext for level variable*/
+pthread_mutex_t lv = PTHREAD_MUTEX_INITIALIZER;
+
 
 pthread_t thrds[5];
 
@@ -66,13 +70,15 @@ int limit = 10;
 
 int reward = 1;
 
-int requiredScore = 5;
+int requiredScore = 60;
 
 int delay = 15;
 
 int rocketdelay = 8;
 
 int done = 0;
+
+int gamepause = 0;
 
 int getLimit(int level);
 
