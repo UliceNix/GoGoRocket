@@ -221,7 +221,7 @@ int setup(struct saucer saucer[])
             saucer[i].row = rand()%3;		/* the row	*/
             saucer[i].col = 0;
             saucer[i].hit = 0;
-            saucer[i].delay = 25 + (rand()%15);	/* a speed	*/
+            saucer[i].delay = 30 + (rand()%15);	/* a speed	*/
             saucer[i].dir = 1;	/* +1 or -1	*/
 	}
         
@@ -268,11 +268,13 @@ void *fire(void *arg)
                 for(int i = 0; i < NUMS; i++){
                     pthread_mutex_lock(&rk);
                     if(saucer[i].row == rocket->row 
-                       && rocket->col >= saucer[i].col 
-                       && rocket->col <= saucer[i].col + strlen(saucer[i].str)){
+                       && rocket->col >= saucer[i].col - 1 
+                       && rocket->col <= saucer[i].col + strlen(saucer[i].str) - 1){
+                        /*
                         pthread_mutex_lock(&mx);
                         mvprintw(LINES-1, 0, "current status: rocket: (%d, %d) saucer (%d %d)", rocket->row, rocket->col, saucer[i].row, saucer[i].col);
                         pthread_mutex_unlock(&mx);
+                        */
                         saucer[i].hit = 1;
                         dispose = 1;
                     }
@@ -298,92 +300,104 @@ void *fire(void *arg)
 
 }
 
+void spawn(struct saucer *info)
+{
+        pthread_mutex_lock(&rk);
+
+        if(info->hit){
+            info->hit = 0;
+            pthread_mutex_lock(&mx);
+            info->str = "         ";
+            move( info->row, info->col );
+            addch(' ');
+            addstr(info->str);
+            addch(' ');
+            move(LINES-1, COLS-1);
+            refresh();
+            pthread_mutex_unlock(&mx);
+        }else{
+            pthread_mutex_lock(&es);
+            escape++;
+            pthread_mutex_unlock(&es);
+        }
+        
+        info->col = 0;
+        info->row = rand()%3;
+        pthread_mutex_unlock(&rk);
+        
+        usleep(info->delay * (rand()%80) * TUNIT);
+        
+        info->str = "<--->";
+        info->delay = 25 + (rand()%15);
+
+}
+
+int vanish(struct saucer *info, int count)
+{
+        if (count == 0)
+                info->str = "<---";
+        else if (count == 1)
+                info->str = "<--";
+        else if (count == 2)
+                info->str = "<-";
+        else if (count == 3)
+                info->str = "<";
+        else if (count == 4)
+                info->str = ""; 
+
+        pthread_mutex_lock(&mx);
+        move( info->row, info->col );
+        addch(' ');
+        addstr( info->str );	
+        addch(' ');
+        move(LINES-1,COLS-1);
+        refresh();		
+        pthread_mutex_unlock(&mx);
+        
+        return ++count;
+}
+
+void moveSaucer(struct saucer *info)
+{
+        pthread_mutex_lock(&mx);	
+        move( info->row, info->col );
+        addch(' ');			
+        addstr( info->str );	
+        addch(' ');			
+        move(LINES-1,COLS-1);
+        refresh();		
+        pthread_mutex_unlock(&mx);
+        return;
+}
+
+
 /* the code that runs in each thread */
 void *attack(void *arg)
 {
 	struct saucer *info = arg;    
 	int len = strlen(info->str)+2;
-        int count = 0;
+        int  vanished = 0;
 
 	while( 1 )
 	{
-            
             usleep(info->delay*TUNIT);
 
             pthread_mutex_lock(&rk);
-
-            if(info->hit > 0){
-                count = 5;
-            }
-
+            if(info->hit > 0)
+                    vanished = 5;
+            
             pthread_mutex_unlock(&rk);
             
-            if ( info->col + len >= COLS && count < 5){
-                
-                if (count == 0)
-                        info->str = "<---";
-                else if (count == 1)
-                        info->str = "<--";
-                else if (count == 2)
-                        info->str = "<-";
-                else if (count == 3)
-                        info->str = "<";
-                else if (count == 4)
-                        info->str = "";
-                count++;
-
-                pthread_mutex_lock(&mx);
-                move( info->row, info->col );
-                addch(' ');
-                addstr( info->str );	
-                addch(' ');
-                move(LINES-1,COLS-1);
-                refresh();		
-                pthread_mutex_unlock(&mx);
-                
+            if ( info->col + len >= COLS && vanished < 5) 
+                    vanished = vanish(info, vanished);
+            
+            if(vanished == 5){
+                spawn(info);
+                vanished = 0;
             }
             
-            if(count == 5){
+            moveSaucer(info);
 
-                pthread_mutex_lock(&rk);
-
-                if(info->hit){
-                    info->hit = 0;
-                    pthread_mutex_lock(&mx);
-                    info->str = "         ";
-                    move( info->row, info->col );
-                    addch(' ');
-                    addstr(info->str);
-                    addch(' ');
-                    move(LINES-1, COLS-1);
-                    refresh();
-                    pthread_mutex_unlock(&mx);
-                }else{
-                    pthread_mutex_lock(&es);
-                    escape++;
-                    pthread_mutex_unlock(&es);
-                }
-
-                info->col = 0;
-                info->row = rand()%3;
-                pthread_mutex_unlock(&rk);
-
-                usleep(info->delay * (rand()%80) * TUNIT);
-                
-                info->str = "<--->";
-                info->delay = 25 + (rand()%15);
-                count = 0;
-            }
-            
-            pthread_mutex_lock(&mx);	/* only one thread	*/
-            move( info->row, info->col );	/* can call curses	*/
-            addch(' ');			/* at a the same time	*/
-            addstr( info->str );		/* Since I doubt it is	*/
-            addch(' ');			/* reentrant		*/
-            move(LINES-1,COLS-1);	/* park cursor		*/
-            refresh();			/* and show it		*/
-            pthread_mutex_unlock(&mx);	/* done with curses	*/
-            
             /* move item to next column and check for bouncing	*/  
             pthread_mutex_lock(&rk);
             info->col++;
