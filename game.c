@@ -39,7 +39,7 @@ int getLimit(int level)
                 return 45;
         default:
                 return -1;
-        }
+       }
 }
 
 int getReward(int level)
@@ -186,9 +186,11 @@ void updateStatus()
 
 int setup(struct saucer saucer[])
 {
+        int i;
+        char c;
 	/* assign rows and velocities to each string */
 	srand(getpid());
-	for(int i=0 ; i<NUMS; i++){
+	for(i = 0 ; i < NUMS; i++){
             saucer[i].str = "<--->";
             saucer[i].row = rand()%ROWS;		
             saucer[i].col = 0;
@@ -220,9 +222,49 @@ int setup(struct saucer saucer[])
 	return NUMS;
 }
 
+/*
+ * 65 ---> 60 --- 6 (score/10)*10  score/10
+ * 55 ---> 50 --- 5 (score - i*10)/10*10 (score-i*10)/10
+ * 45 ---> 40 --- 4 
+ */
+void enterShop(){
+
+        int choice_available = score / 10;
+        int i;
+        char c;
+        int min = (choice_available > 3) ? 3 : choice_available;
+
+        for(i = 0; i < min; i++){
+            mvprintw(i, 0, " %d) Use %d score to buy %d rockets", 
+                     i+1, (score - i*10)/10 * 10, (score - i*10)/10);
+        }
+
+        mvprintw(4, 0, "Or Enter 'Q' to Quit\n");
+
+        while( (c = getch()) != EOF){
+            if(c == '1'){
+                rockets +=  score/10;
+                score -=  (score)/10 * 10;
+                break;
+            }else if(c == '2' && min > 1){
+                rockets +=  (score - 10)/10;
+                score -=  (score - 10)/10 * 10;
+                break;
+            }else if(c == '3' && min > 2){
+                rockets +=  (score - 20)/10;
+                score -=  (score - 20)/10 * 10;
+                break;
+            }else if(c == 'Q'){
+                return;
+            }
+            
+        }
+}
 
 int levelup(struct saucer saucer[])
 {
+        int i;
+        char c;
         srand(getpid());
         
         /* Since when doing the levelup process, all the threads that 
@@ -231,7 +273,7 @@ int levelup(struct saucer saucer[])
          */
         updateSetting(level);
         
-        for(int i=0 ; i<NUMS; i++){
+        for(i = 0 ; i < NUMS; i++){
             saucer[i].str = "<--->";
             saucer[i].row = rand()%ROWS;		
             saucer[i].col = 0;
@@ -242,14 +284,19 @@ int levelup(struct saucer saucer[])
 
         pthread_mutex_lock(&mx);
         erase();
+
         move(0, 0);
         refresh();
-        mvprintw(1,0," #       ####### #     # ####### #          #     # ######");  
-        mvprintw(2,0," #       #       #     # #       #          #     # #     #");
-        mvprintw(3,0,      " #       #       #     # #       #          #     # #     #");
-        mvprintw(4,0," #       #####   #     # #####   #          #     # ######");
+        mvprintw(1,0," #       ####### #     # ####### #          #     "
+                 "# ######");  
+        mvprintw(2,0," #       #       #     # #       #          #     #"
+                 " #     #");
+        mvprintw(3,0,      " #       #       #     # #       #          #"
+                 "     # #     #");
+        mvprintw(4,0," #       #####   #     # #####   #          #     #"
+                 " ######");
         mvprintw(5,0," #       #        #   #  #       #          #     # #"); 
-        mvprintw(6,0," #       #         # #   #       #          #     # # ");  
+        mvprintw(6,0," #       #         # #   #       #          #     # # ");
         mvprintw(7,0," ####### #######    #    ####### #######     #####  #");
         mvprintw(8,0,"LEVEL %d. MAX ESCAPE: %d. THE SCORE TO THE NEXT LEVEL: %d"
                  , level, limit, requiredScore);
@@ -261,11 +308,31 @@ int levelup(struct saucer saucer[])
                      ". LEVEL 6 IS A FREE PLAY MODE. THE GAME WILL ONLY"
                      " TERMINATE AS SOON AS YOU RUN OF OUT ROCKETS.");
         }
-
+        
+        mvprintw(11, 0, "  .dBBBBP   dBP dBP dBBBBP dBBBBBb\n"
+                 "  BP               dB'.BP      dB'\n"
+                 "  `BBBBb  dBBBBBP dB'.BP   dBBBP'\n"
+                 "     dBP dBP dBP dB'.BP   dBP    \n"
+                 "dBBBBP' dBP dBP dBBBBP   dBP     \n"
+                 "Would you like to buy some extra rockets from the store?"
+                 "(Y/N)\n"
+                );
         refresh();
-        sleep(4);
+
+        while((c = getch()) != EOF){
+            if(c == 'N') 
+                    break;
+            else if(c == 'Y'){
+                 erase();
+                 move(0,0);
+                 refresh();
+                 enterShop();
+                 break;
+            }
+        }
 
         erase();
+        move(0,0);
         refresh();
 
         move(LINES-2, ((COLS+1)/2));
@@ -274,6 +341,7 @@ int levelup(struct saucer saucer[])
         addch(' ');
         move(LINES-1, COLS-1);
         refresh();
+
 	mvprintw(LINES-1,
                  0,
                  "Quit(Q), Left(,), Right(.), Fire(SPACE)."
@@ -297,19 +365,23 @@ void moveRocket(struct rocket *rocket)
 void disposeRocket(struct rocket *rocket)
 {
         move( rocket->row, rocket->col);
-        addch(' ');        
+        addch(' ');
+        
         move( rocket->row - 1, rocket->col);
         addch(' ');
         return;
 }
 
 void hitReward(int countHits){
+
         pthread_mutex_lock(&sc);
         score += countHits * countHits;
         pthread_mutex_unlock(&sc);
+
         pthread_mutex_lock(&dc);
-        rockets += reward * (countHits % 3);
+        rockets += countHits * reward;
         pthread_mutex_unlock(&dc);
+
         updateStatus();
         return;
 }
@@ -318,15 +390,17 @@ void *fire(void *arg)
 {
         struct rocket *rocket = arg;
         int dispose = 0;
-        int countHits = 0;
+        int countHits;
 
         while (rocket->row >= 0){
             usleep(rocket->speed*TUNIT);
             moveRocket(rocket);
             
             if(rocket->row < ROWS){
+                int i;
+                countHits = 0;
                 pthread_mutex_lock(&rk);
-                for(int i = 0; i < NUMS; i++){
+                for(i = 0; i < NUMS; i++){
                     if(saucer[i].row == rocket->row 
                        && rocket->col >= saucer[i].col - 1 
                        && rocket->col <= 
@@ -494,6 +568,7 @@ int gameOn(){
 	int c;
         int over = 0;
 	/* process user input */
+
 	while(1) {
             
             c = getch();
@@ -562,7 +637,7 @@ int gameOn(){
 
 	}
 
-        /* When the code breaks from while loop, these three
+        /* when the code breaks from while loop, these three
          * mutexes may be still locked. So doing the unlock
          * steps just to be safe.
          */
