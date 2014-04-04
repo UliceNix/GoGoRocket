@@ -24,6 +24,7 @@
 #include	<unistd.h>
 #include	<string.h>
 #include         "game.h"
+#include         "highscore.h"
 
 
 int getLimit(int level)
@@ -121,7 +122,9 @@ void printUserMenu()
 {
         printf("Welcome to kill-that-saucer game\n");
         printf("================================\n");
-        printf("|    Start Game (S)            |\n");
+        printf("|       Start Game (S)         |\n");
+        printf("+------------------------------+\n");
+        printf("|       High Score (H)         |\n");
         printf("+------------------------------+\n");
         printf("|        Quit   (Q)            |\n");
         printf("================================\n");
@@ -506,7 +509,7 @@ void moveSaucer(struct saucer *info)
 }
 
 
-/* the code that runs in each thread */
+/* the code that runs in each saucer thread */
 void *attack(void *arg)
 {
 	struct saucer *info = arg;    
@@ -655,6 +658,8 @@ int main()
 	int num_msg ;
 	int i;
         int over;
+        int lowest_score;
+        struct highscore highscore;
 
         printUserMenu();
         printInstruction();
@@ -664,9 +669,8 @@ int main()
                     return 0;
             else if(c == 'S') 
                     break;
-            else{
-                    printf("Please try again!\n");
-            }
+            else if(c == 'H')
+                    printHighscore();
         }
         
         /* SINGLE LEVEL HERE:
@@ -714,11 +718,20 @@ int main()
         erase();
         refresh();
 	endwin();
-        printf( "  ####    ##   #    # ######     ####  #    # ###### ##### \n"    
-                " #    #  #  #  ##  ## #         #    # #    # #      #    #  \n"  
-                " #      #    # # ## # #####     #    # #    # #####  #    #  \n"  
-                " #  ### ###### #    # #         #    # #    # #      #####   \n"  
-                " #    # #    # #    # #         #    #  #  #  #      #   #   \n"  
-                "  ####  #    # #    # ######     ####    ##   ###### #    #  \n");
+        printf( "  ####    ##   #    # ######     ####  #    # ######"
+                " ##### \n"    
+                " #    #  #  #  ##  ## #         #    # #    # #      "
+                "#    #  \n"  
+                " #      #    # # ## # #####     #    # #    # #####  "
+                "#    #  \n"  
+                " #  ### ###### #    # #         #    # #    # #      "
+                "#####   \n"  
+                " #    # #    # #    # #         #    #  #  #  #      "
+                "#   #   \n"  
+                "  ####  #    # #    # ######     ####    ##   ###### "
+                "#    #  \n");
+        higscore = populate();
+        if(highscore.count == 0 || lowest < lowestHighscore())
+                writeNewHighscore(score);
 	return 0;
 }
