@@ -19,6 +19,7 @@ struct	saucer {
         int hit;
         int delay;  
         int dir;
+        int live;
 
 };
 

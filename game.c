@@ -51,7 +51,7 @@ int getReward(int level)
         case 3:
                 return 1;
         case 4:
-                return 1;
+                return 2;
         case 5:
                 return 2;
         default:
@@ -151,7 +151,7 @@ void moveRight()
 
 void moveLeft()
 {
-        if(base.col -1  < 0)
+        if(base.col - 5  < 1)
                 return;
         
         pthread_mutex_lock(&mx);
@@ -176,9 +176,9 @@ void updateStatus()
         pthread_mutex_lock(&mx);
         mvprintw(LINES-1,
                  0,
-                 "Quit(Q), Left(,), Right(.), Fire(SPACE)." 
-                 " Rockets: %d Score:%d Escape:%d",
-                 rockets, score, escape);
+                 "Pause(P) Resume(R)"
+                 " Rockets: %5d Score:%5d Escape:%4d/%4d",
+                 rockets, score, escape, limit);
         refresh();
         pthread_mutex_unlock(&mx);
         pthread_mutex_unlock(&es);
@@ -200,8 +200,9 @@ int setup(struct saucer saucer[])
             saucer[i].hit = 0;
             saucer[i].delay = 15 + (rand()%RANGE);	
             saucer[i].dir = 1;
+            saucer[i].live = 1;
 	}
-        
+    
         srand(getpid());
                
 	/* set up curses */
@@ -215,11 +216,12 @@ int setup(struct saucer saucer[])
         addch(' ');
         move(LINES-1, COLS-1);
         refresh();
-	mvprintw(LINES-1,
-                 0,
-                 "Quit(Q), Left(,), Right(.), Fire(SPACE)."
-                 " Rockets: 10 Score:0 Escape:0");
-        base.col = (COLS+1)/2; 
+        mvprintw(LINES-1,
+             0,
+             "Pause(P) Resume(R)"
+             " Rockets: %5d Score:%5d Escape:%4d/%4d",
+             rockets, score, escape, limit);
+        base.col = (COLS+1)/2;
         done = 1;
 
 	return NUMS;
@@ -282,7 +284,7 @@ int levelup(struct saucer saucer[])
             saucer[i].col = 0;
             saucer[i].hit = 0;
             saucer[i].delay = delay + (rand()%RANGE);	
-            saucer[i].dir = 1;
+            saucer[i].live = 1;
 	}
 
         pthread_mutex_lock(&mx);
@@ -312,14 +314,11 @@ int levelup(struct saucer saucer[])
                      " TERMINATE AS SOON AS YOU RUN OF OUT ROCKETS.");
         }
         
-        mvprintw(11, 0, "  .dBBBBP   dBP dBP dBBBBP dBBBBBb\n"
-                 "  BP               dB'.BP      dB'\n"
-                 "  `BBBBb  dBBBBBP dB'.BP   dBBBP'\n"
-                 "     dBP dBP dBP dB'.BP   dBP    \n"
-                 "dBBBBP' dBP dBP dBBBBP   dBP     \n"
+        mvprintw(11, 0,
                  "Would you like to buy some extra rockets from the store?"
                  "(Y/N)\n"
                 );
+
         refresh();
 
         while((c = getch()) != EOF){
@@ -345,11 +344,12 @@ int levelup(struct saucer saucer[])
         move(LINES-1, COLS-1);
         refresh();
 
-	mvprintw(LINES-1,
-                 0,
-                 "Quit(Q), Left(,), Right(.), Fire(SPACE)."
-                 " Rockets: %d Score:%d Escape:%d", rockets, score, escape);
-        base.col = (COLS+1)/2; 
+        mvprintw(LINES-1,
+             0,
+             "Pause(P) Resume(R)"
+             " Rockets: %5d Score:%5d Escape:%4d/%4d",
+             rockets, score, escape, limit);
+        base.col = (COLS+1)/2;
         done = 1;
         pthread_mutex_unlock(&mx);
         return NUMS;
@@ -378,7 +378,7 @@ void disposeRocket(struct rocket *rocket)
 void hitReward(int countHits){
 
         pthread_mutex_lock(&sc);
-        score += countHits;
+        score += countHits * level;
         pthread_mutex_unlock(&sc);
 
         pthread_mutex_lock(&dc);
@@ -404,8 +404,9 @@ void *fire(void *arg)
                 countHits = 0;
                 pthread_mutex_lock(&rk);
                 for(i = 0; i < NUMS; i++){
-                    if(saucer[i].row == rocket->row 
-                       && rocket->col >= saucer[i].col - 1 
+                    if(saucer[i].live > 0
+                       && saucer[i].row == rocket->row
+                       && rocket->col >= saucer[i].col - 2
                        && rocket->col <= 
                        saucer[i].col + strlen(saucer[i].str) - 1){
                         saucer[i].hit = 1;
@@ -418,11 +419,14 @@ void *fire(void *arg)
 
             if(countHits)
                     hitReward(countHits);
-
+            
             pthread_mutex_lock(&mx);
-            if(dispose)
-                    disposeRocket(rocket);
-            else{
+            if(dispose){
+                disposeRocket(rocket);
+                pthread_mutex_unlock(&mx);
+                break;
+                
+            }else{
                 if(rocket->row - 1 >= 0){
                     move(rocket->row - 1, rocket->col);
                     addch('^');
@@ -440,7 +444,7 @@ void *fire(void *arg)
 void spawn(struct saucer *info)
 {
         pthread_mutex_lock(&rk);
-
+        info->live = 0;
         if(info->hit){
             info->hit = 0;
             pthread_mutex_lock(&mx);
@@ -464,9 +468,12 @@ void spawn(struct saucer *info)
         pthread_mutex_unlock(&rk);
         
         usleep(info->delay * (rand()%RANGE) * TUNIT);
-        
-        info->str = "<--->";
+    
+        pthread_mutex_lock(&rk);
+        info->live = 1;
+        pthread_mutex_unlock(&rk);
         info->delay = delay + (rand()%RANGE);
+        info->str = "<--->";
 
 }
 
@@ -515,13 +522,13 @@ void *attack(void *arg)
 	struct saucer *info = arg;    
 	int len = strlen(info->str)+2;
         int  vanished = 0;
-
+        
 	while( 1 )
 	{
             usleep(info->delay*TUNIT);
-
+            
             pthread_mutex_lock(&rk);
-            if(info->hit > 0)
+            if(info->hit)
                     vanished = 5;
             
             pthread_mutex_unlock(&rk);
@@ -570,21 +577,22 @@ void unlockEverything(){
 int gameOn(){
 	int c;
         int over = 0;
+        int i = 0;
 
-	/* process user input */
-
+        /* process user input*/
 	while(1) {
             
             c = getch();
             
             if ( c == 'Q' ){
-                over = 1;
-                break;
+                for (i=0; i<NUMS; i++ )
+                        pthread_cancel(thrds[i]);
+                return 1;
             }
             
             else if (c == 'P' && !gamepause){
-                    lockEverything();
-                    continue;
+                lockEverything();
+                continue;
             }
             else if (c == 'R' && gamepause){
                 unlockEverything();
@@ -593,7 +601,6 @@ int gameOn(){
             
             if(gamepause)
                     continue;
-            
 
             pthread_mutex_lock(&dc);
             pthread_mutex_lock(&es);
@@ -604,7 +611,6 @@ int gameOn(){
 
             pthread_mutex_unlock(&es);
             pthread_mutex_unlock(&dc);
-
             
             pthread_mutex_lock(&sc);
             pthread_mutex_lock(&lv);
@@ -701,10 +707,11 @@ int main()
             erase();
             refresh();
 
+            pthread_mutex_unlock(&mx);
             if(over)
                     break;
         }
-         
+    
         erase();
         refresh();
         endwin();
@@ -728,7 +735,7 @@ int main()
                 "  ####  #    # #    # ######     ####    ##   ###### "
                 "#    #  \n");
         refresh();
-        sleep(3);
+        sleep(1);
 
         highscore = populate();
         if(highscore.count ==  0)
@@ -754,9 +761,8 @@ int main()
                 name = malloc(20);
                 mvscanw(13,0,"%20s", name);
                 writeNewHighscore(score, name);
+                mvprintw(13,0,"finish Input");
         }
-                              
-        refresh();
         endwin();
 
         pthread_mutex_unlock(&mx);
