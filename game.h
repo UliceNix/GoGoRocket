@@ -16,7 +16,7 @@ struct	saucer {
         char *str;	
         int row;	
         int col;
-int hit;
+        int hit;
         int delay;  
         int dir;
 
@@ -70,7 +70,7 @@ int limit = 10;
 
 int reward = 1;
 
-int requiredScore = 60;
+int requiredScore = 30;
 
 int delay = 15;
 
