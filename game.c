@@ -297,8 +297,7 @@ void moveRocket(struct rocket *rocket)
 void disposeRocket(struct rocket *rocket)
 {
         move( rocket->row, rocket->col);
-        addch(' ');
-        
+        addch(' ');        
         move( rocket->row - 1, rocket->col);
         addch(' ');
         return;
