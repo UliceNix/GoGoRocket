@@ -378,7 +378,7 @@ void disposeRocket(struct rocket *rocket)
 void hitReward(int countHits){
 
         pthread_mutex_lock(&sc);
-        score += countHits * countHits;
+        score += countHits;
         pthread_mutex_unlock(&sc);
 
         pthread_mutex_lock(&dc);
@@ -410,7 +410,7 @@ void *fire(void *arg)
                        saucer[i].col + strlen(saucer[i].str) - 1){
                         saucer[i].hit = 1;
                         dispose = 1;
-                        countHits++;
+                        ++countHits;
                     }
                 }
                 pthread_mutex_unlock(&rk); 
@@ -570,13 +570,17 @@ void unlockEverything(){
 int gameOn(){
 	int c;
         int over = 0;
+
 	/* process user input */
 
 	while(1) {
             
             c = getch();
             
-            if ( c == 'Q' ) break;
+            if ( c == 'Q' ){
+                over = 1;
+                break;
+            }
             
             else if (c == 'P' && !gamepause){
                     lockEverything();
@@ -658,7 +662,7 @@ int main()
 	int num_msg ;
 	int i;
         int over;
-        int lowest_score;
+        char* name;
         struct highscore highscore;
 
         printUserMenu();
@@ -672,20 +676,6 @@ int main()
             else if(c == 'H')
                     printHighscore();
         }
-        
-        /* SINGLE LEVEL HERE:
-        num_msg = setup(saucer);
-        for(i=0 ; i<num_msg; i++)
-                if ( pthread_create(&thrds[i], NULL, attack, &saucer[i])){
-                    fprintf(stderr,"error creating thread");
-                    endwin();
-                        exit(0);
-                }
-        over = gameOn();
-        pthread_mutex_lock(&mx);
-        for (i=0; i<num_msg; i++ )
-                pthread_cancel(thrds[i]);
-        */
         
         while(1){
 
@@ -717,8 +707,15 @@ int main()
          
         erase();
         refresh();
-	endwin();
-        printf( "  ####    ##   #    # ######     ####  #    # ######"
+        endwin();
+
+        pthread_mutex_lock(&mx);
+        initscr();
+	crmode();
+	noecho();
+	clear();
+        refresh();
+        mvprintw(0, 0,"  ####    ##   #    # ######     ####  #    # ######"
                 " ##### \n"    
                 " #    #  #  #  ##  ## #         #    # #    # #      "
                 "#    #  \n"  
@@ -730,8 +727,38 @@ int main()
                 "#   #   \n"  
                 "  ####  #    # #    # ######     ####    ##   ###### "
                 "#    #  \n");
-        higscore = populate();
-        if(highscore.count == 0 || lowest < lowestHighscore())
-                writeNewHighscore(score);
-	return 0;
+        refresh();
+        sleep(3);
+
+        highscore = populate();
+        if(highscore.count ==  0)
+                mvprintw(7, 0, "No Highscores!");
+
+        if(highscore.count > 0){
+            mvprintw(7,0,"%40s", "***       HIGH SCORE      ***\n");
+            mvprintw(8,0,"%20s | %20s\n", "User Name", "Score");
+            mvprintw(9,0,"%20s | %20s\n", highscore.p1, highscore.s1);
+        }
+
+        if(highscore.count > 1)
+                mvprintw(10,0,"%20s | %20s\n", highscore.p2, highscore.s2);
+
+        if(highscore.count > 2)
+                mvprintw(11,0,"%20s | %20s\n", highscore.p3, highscore.s3);
+
+        if(highscore.count == 0 || score >= lowestHighscore()){
+                mvprintw(12,0,"You score is %d. Please Enter Your username "
+                         "(Max 20 characters):", score);
+
+                refresh();
+                name = malloc(20);
+                mvscanw(13,0,"%20s", name);
+                writeNewHighscore(score, name);
+        }
+                              
+        refresh();
+        endwin();
+
+        pthread_mutex_unlock(&mx);
+        return 0;
 }
