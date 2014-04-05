@@ -63,13 +63,13 @@ int levelUpLimit(int level)
 {
         switch (level){
         case 2:
-                return 160;
+                return 100;
         case 3:
-                return 280;
+                return 260;
         case 4:
-                return 340;
+                return 500;
         default:
-                return 1000;
+                return 5000;
         }
 }
 
@@ -177,8 +177,8 @@ void updateStatus()
         mvprintw(LINES-1,
                  0,
                  "Pause(P) Resume(R)"
-                 " Rockets: %5d Score:%5d Escape:%4d/%4d",
-                 rockets, score, escape, limit);
+                 " Rockets: %5d Score:%5d Escape:%4d/%4d Lv:%d",
+                 rockets, score, escape, limit, level);
         refresh();
         pthread_mutex_unlock(&mx);
         pthread_mutex_unlock(&es);
@@ -217,10 +217,10 @@ int setup(struct saucer saucer[])
         move(LINES-1, COLS-1);
         refresh();
         mvprintw(LINES-1,
-             0,
-             "Pause(P) Resume(R)"
-             " Rockets: %5d Score:%5d Escape:%4d/%4d",
-             rockets, score, escape, limit);
+                 0,
+                 "Pause(P) Resume(R)"
+                 " Rockets: %5d Score:%5d Escape:%4d/%4d Lv:%d",
+                 rockets, score, escape, limit, level);
         base.col = (COLS+1)/2;
         done = 1;
 
@@ -241,22 +241,22 @@ void enterShop(){
 
         for(i = 0; i < min; i++){
             mvprintw(i, 0, " %d) Use %d score to buy %d rockets", 
-                     i+1, (score - i*10)/10 * 10, (score - i*10)/10);
+                     i+1, (score - i*10)/10 * 10, (score - i*10)/5);
         }
 
         mvprintw(4, 0, "Or Enter 'Q' to Quit\n");
 
         while( (c = getch()) != EOF){
             if(c == '1'){
-                rockets +=  score/10;
+                rockets +=  score/5;
                 score -=  (score)/10 * 10;
                 break;
             }else if(c == '2' && min > 1){
-                rockets +=  (score - 10)/10;
+                rockets +=  (score - 10)/5;
                 score -=  (score - 10)/10 * 10;
                 break;
             }else if(c == '3' && min > 2){
-                rockets +=  (score - 20)/10;
+                rockets +=  (score - 20)/5;
                 score -=  (score - 20)/10 * 10;
                 break;
             }else if(c == 'Q'){
@@ -345,10 +345,10 @@ int levelup(struct saucer saucer[])
         refresh();
 
         mvprintw(LINES-1,
-             0,
-             "Pause(P) Resume(R)"
-             " Rockets: %5d Score:%5d Escape:%4d/%4d",
-             rockets, score, escape, limit);
+                 0,
+                 "Pause(P) Resume(R)"
+                 " Rockets: %5d Score:%5d Escape:%4d/%4d Lv:%d",
+                 rockets, score, escape, limit, level);
         base.col = (COLS+1)/2;
         done = 1;
         pthread_mutex_unlock(&mx);
@@ -369,14 +369,12 @@ void disposeRocket(struct rocket *rocket)
 {
         move( rocket->row, rocket->col);
         addch(' ');
-        
-        move( rocket->row - 1, rocket->col);
-        addch(' ');
+        refresh();
         return;
 }
 
 void hitReward(int countHits){
-
+        
         pthread_mutex_lock(&sc);
         score += countHits * level;
         pthread_mutex_unlock(&sc);
@@ -393,7 +391,7 @@ void *fire(void *arg)
 {
         struct rocket *rocket = arg;
         int dispose = 0;
-        int countHits;
+        int countHits = 0;
 
         while (rocket->row >= 0){
             usleep(rocket->speed*TUNIT);
@@ -406,10 +404,12 @@ void *fire(void *arg)
                 for(i = 0; i < NUMS; i++){
                     if(saucer[i].live > 0
                        && saucer[i].row == rocket->row
-                       && rocket->col >= saucer[i].col - 2
+                       && rocket->col >= saucer[i].col - 1
                        && rocket->col <= 
                        saucer[i].col + strlen(saucer[i].str) - 1){
                         saucer[i].hit = 1;
+                        saucer[i].str = " ";
+                        refresh();
                         dispose = 1;
                         ++countHits;
                     }
@@ -417,7 +417,7 @@ void *fire(void *arg)
                 pthread_mutex_unlock(&rk); 
             }
 
-            if(countHits)
+            if(countHits > 0)
                     hitReward(countHits);
             
             pthread_mutex_lock(&mx);
@@ -445,6 +445,7 @@ void spawn(struct saucer *info)
 {
         pthread_mutex_lock(&rk);
         info->live = 0;
+
         if(info->hit){
             info->hit = 0;
             pthread_mutex_lock(&mx);
@@ -527,10 +528,10 @@ void *attack(void *arg)
 	{
             usleep(info->delay*TUNIT);
             
+            
             pthread_mutex_lock(&rk);
             if(info->hit)
                     vanished = 5;
-            
             pthread_mutex_unlock(&rk);
             
             if ( info->col + len >= COLS && vanished < 5) 
@@ -617,6 +618,8 @@ int gameOn(){
             if(level < 6 && score >= requiredScore){
                 level++;
                 done = 0;
+                erase();
+                refresh();
                 break;
             }
             pthread_mutex_unlock(&sc);
@@ -644,6 +647,8 @@ int gameOn(){
                 
                 pthread_mutex_lock(&dc);
                 rockets--;
+                if(rockets == 0)
+                        return 1;
                 pthread_mutex_unlock(&dc);
                 updateStatus();
             }
@@ -735,7 +740,7 @@ int main()
                 "  ####  #    # #    # ######     ####    ##   ###### "
                 "#    #  \n");
         refresh();
-        sleep(1);
+        //sleep(1);
 
         highscore = populate();
         if(highscore.count ==  0)
@@ -753,6 +758,8 @@ int main()
         if(highscore.count > 2)
                 mvprintw(11,0,"%20s | %20s\n", highscore.p3, highscore.s3);
 
+        refresh();
+
         if(highscore.count == 0 || score >= lowestHighscore()){
                 mvprintw(12,0,"You score is %d. Please Enter Your username "
                          "(Max 20 characters):", score);
@@ -761,7 +768,7 @@ int main()
                 name = malloc(20);
                 mvscanw(13,0,"%20s", name);
                 writeNewHighscore(score, name);
-                mvprintw(13,0,"finish Input");
+                
         }
         endwin();
 
