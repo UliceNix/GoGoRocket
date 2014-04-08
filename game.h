@@ -18,7 +18,6 @@ struct	saucer {
         int col;
         int hit;
         int delay;  
-        int dir;
         int live;
 
 };
@@ -46,7 +45,7 @@ pthread_mutex_t es = PTHREAD_MUTEX_INITIALIZER;
 /* mutex for decreasing/ increasing the number of rockets*/
 pthread_mutex_t dc = PTHREAD_MUTEX_INITIALIZER;
 
-/* mutex for increasing score*/
+/* mutex for modifying score*/
 pthread_mutex_t sc = PTHREAD_MUTEX_INITIALIZER;
 
 /* mutext for level variable*/
@@ -81,11 +80,19 @@ int done = 0;
 
 int gamepause = 0;
 
+
 int getLimit(int level);
 
 int getReward(int level);
 
 int levelUpLimit(int level);
+
+int getDelay(int level);
+
+int getRocketDelay(int level);
+
+void updateSetting(int level);
+
 
 void printInstruction();
 
@@ -100,3 +107,34 @@ void updateStatus();
 int setup(struct saucer saucer[]);
 
 int levelup(struct saucer saucer[]);
+
+void enterShop();
+
+void recordHighscore();
+
+int gameOn();
+
+void unlockEverything();
+
+void lockEverything();
+
+
+void moveRocket(struct rocket *rocket);
+
+void disposeRocket(struct rocket *rocket);
+
+void hitReward(int countHits);
+
+void *fire(void *arg);
+
+
+void spawn(struct saucer *info);
+
+int vanish(struct saucer *info, int count);
+
+void moveSaucer(struct saucer *info);
+
+void *attack(void *arg);
+
+
+

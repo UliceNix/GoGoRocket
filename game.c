@@ -1,20 +1,44 @@
-/*
- * tanimate.c: animate several strings using threads, curses, usleep()
+/* game.c
+ *   This is the main game file, which contains threads and managers
+ *   threads for rockets, saucers.
  *
- *	bigidea one thread for each animated string
- *		one thread for keyboard control
- *		shared variables for communication
- *	compile	cc tanimate.c -lcurses -lpthread -o tanimate
- *	
- *      to do   [functionalities]
- *              needs locks for shared variables
- *	        to increase escapes variable
- *              develop levels 
- *              [Format and Documents]
- *              User documentation
- *              Format, and divide this file into some .h files.
- *              
- *              
+ *   Main game:
+ *     getLimit()      : get the limit of escaped rockests for each level
+ *     getReward()     : get the reward value for each correct shot in each 
+ *                       level
+ *     levelUpLimit()  : get the limit of scores for user to level up
+ *     getDelay()      : return the delay value for a saucer thread
+ *     getRocketDelay(): return the delay value for a rocket thread
+ *     updateSetting() : update all information like limit, score, rocket in 
+ *                       level up process
+ *     gameOn()        : the game function that runs in each level
+ *     setup()         : setup function initializes necessary varialbes for game
+ *                       to start
+ *     moveLeft()      : move launcher to left
+ *     moveRight()     : move launcher to right
+ *     printUserMenu() : print welcome menu
+ *     printInstruction: print user instruction
+ *     levelup()       : modify necessary variables and level up
+ *     updateStatus()  : update the status line at the bottom of the screen
+ *     enterShop()     : prompt user to buy rockets by trading scores
+ *     recordHighscore : record a user's score if the score is higher than the
+ *                       lowest score in highscore board
+ *     unlockEverything: unlock all locks for game to resume
+ *     lockEverything  : lock every lock to pause the game
+ * 
+ *   Rocket:
+ *     moveRocket()   : move the rocket up.
+ *     disposeRocket(): dispose a rocket by eliminating it from screen
+ *     hitReward()    : when hit a saucer, this function will add proper scores
+ *                      and rockets to user's current scores and rockets
+ *     *fire()        : a rocket thread that moves up and detects if it hits a 
+ *                      saucer
+ *   Saucer:
+ *     moveSaucer()   : move the saucer from left to right 
+ *     vanish()       : let a saucer escape the screen character by character
+ *     *attack()      : a saucer thread that moves saucer and tries to escape
+ *     spawn()        : after got hit or escaped, a saucer thread is recycled 
+ *                      and put to spawn process.
  */
 
 #include	<stdio.h>
@@ -26,7 +50,9 @@
 #include         "game.h"
 #include         "highscore.h"
 
-
+/* depending on the level number, the limit of escaped saucers varies.
+ * Thus getLimit returns the corresponding limit when given a level number 
+ */
 int getLimit(int level)
 {
         switch (level){
@@ -43,6 +69,10 @@ int getLimit(int level)
        }
 }
 
+
+/* depending on the level number, the reward scheme varies.
+ * Thus getReward returns the corresponding reward when given a level number 
+ */
 int getReward(int level)
 {
         switch (level){
@@ -59,6 +89,11 @@ int getReward(int level)
         }
 }
 
+
+/* depending on the level number, the scores that are needed to level up  varies
+ * Thus levelUpLimit returns the corresponding scores when given a level 
+ * number 
+ */
 int levelUpLimit(int level)
 {
         switch (level){
@@ -73,6 +108,10 @@ int levelUpLimit(int level)
         }
 }
 
+/* depending on the level number, the delay for a saucer varies.
+ * Thus getDelay returns the corresponding delay value  when given a level 
+ * number 
+ */
 int getDelay(int level)
 {
         switch (level){
@@ -88,6 +127,10 @@ int getDelay(int level)
 
 }
 
+/* depending on the level number, the delay for a rocket varies.
+ * Thus getRocketDelay returns the corresponding delay value when given a level 
+ * number 
+ */
 int getRocketDelay(int level)
 {
         switch (level){
@@ -102,6 +145,7 @@ int getRocketDelay(int level)
         }
 }
 
+/* update all "status" variables when leveling up */
 void updateSetting(int level)
 {
         limit = getLimit(level);
@@ -111,13 +155,33 @@ void updateSetting(int level)
         rocketdelay = getRocketDelay(level);
 }
 
-
+/* print game instruction to users */
 void printInstruction()
 {
-        printf("This is a shooting game\n");
+        printf("The scenario is you are the guard of planet Alderaan.\n" 
+               "Now your home planet is underattack.\n"
+               "A large number of saucers are dispatching from Death Star"
+               " to Alderaan.\n"
+               "Take action and protect your home planet!\n");
+        printf("=============================================================\n"
+               "|Quit(Q), Pause(P), Resume(R), Left(,), Right(.),Fire(SPACE)|\n"
+               "+-----------------------------------------------------------+\n"
+               "| A rockest is deconstructed as soon as it hits a saucer or |\n"
+               "| more rockets in the same attacking range. Thus it cannot  |\n"
+               "| proceed to hit other saucers.                             |\n"
+               "+-----------------------------------------------------------+\n"
+               "| This game has multiple levels for you to discover!        |\n"
+               "| Each level, the score and rewards will vary as well as the|\n"
+               "| speed of a saucer and the interval between saucers.       |\n"
+               "+-----------------------------------------------------------+\n"
+               "| As soon as you level up, you could choose to buy extra    |\n"
+               "| rockets by trading some scores in the game store.         |\n"
+               "+-----------------------------------------------------------+\n"
+                );
         return;
 }
 
+/* print welcome menu*/
 void printUserMenu()
 {
         printf("Welcome to kill-that-saucer game\n");
@@ -131,6 +195,7 @@ void printUserMenu()
         return;
 }
 
+/* move the launcher to right */
 void moveRight()
 {
         if(base.col + 1 >= COLS - 1)
@@ -149,6 +214,7 @@ void moveRight()
         return;
 }
 
+/* move the launcher to left*/
 void moveLeft()
 {
         if(base.col - 5  < 1)
@@ -168,6 +234,7 @@ void moveLeft()
         return;
 }
 
+/* update the status in the bottom line */
 void updateStatus()
 {
         pthread_mutex_lock(&dc);
@@ -187,6 +254,7 @@ void updateStatus()
         return;
 }
 
+/* setup screens, status variables for game to start*/
 int setup(struct saucer saucer[])
 {
         int i;
@@ -199,7 +267,6 @@ int setup(struct saucer saucer[])
             saucer[i].col = 0;
             saucer[i].hit = 0;
             saucer[i].delay = 15 + (rand()%RANGE);	
-            saucer[i].dir = 1;
             saucer[i].live = 1;
 	}
     
@@ -216,11 +283,15 @@ int setup(struct saucer saucer[])
         addch(' ');
         move(LINES-1, COLS-1);
         refresh();
+
+        /* print initial status */
         mvprintw(LINES-1,
                  0,
                  "Pause(P) Resume(R)"
                  " Rockets: %5d Score:%5d Escape:%4d/%4d Lv:%d",
                  rockets, score, escape, limit, level);
+
+        /* set up launcher */
         base.col = (COLS+1)/2;
         done = 1;
 
@@ -228,9 +299,8 @@ int setup(struct saucer saucer[])
 }
 
 /*
- * 65 ---> 60 --- 6 (score/10)*10  score/10
- * 55 ---> 50 --- 5 (score - i*10)/10*10 (score-i*10)/10
- * 45 ---> 40 --- 4 
+ * enter the gameshop in which users could trade scores to buy
+ * some extra rockets. 
  */
 void enterShop(){
 
@@ -239,13 +309,16 @@ void enterShop(){
         char c;
         int min = (choice_available > 3) ? 3 : choice_available;
 
+        /* print at most 3 choices for users to choose */
         for(i = 0; i < min; i++){
             mvprintw(i, 0, " %d) Use %d score to buy %d rockets", 
                      i+1, (score - i*10)/10 * 10, (score - i*10)/5);
         }
 
+        /* if there's no deal that satisfies the user, he could use Q to quit*/
         mvprintw(4, 0, "Or Enter 'Q' to Quit\n");
 
+        /* get the user's input */
         while( (c = getch()) != EOF){
             if(c == '1'){
                 rockets +=  score/5;
@@ -266,6 +339,9 @@ void enterShop(){
         }
 }
 
+/* the levelup function will perform a level up action by updating all
+ * status values and print some ascii work and let the user to shop
+ */
 int levelup(struct saucer saucer[])
 {
         int i;
@@ -288,8 +364,9 @@ int levelup(struct saucer saucer[])
 	}
 
         pthread_mutex_lock(&mx);
+        
+        /* print levelup message*/
         erase();
-
         move(0, 0);
         refresh();
         mvprintw(1,0," #       ####### #     # ####### #          #     "
@@ -306,6 +383,9 @@ int levelup(struct saucer saucer[])
         mvprintw(8,0,"LEVEL %d. MAX ESCAPE: %d. THE SCORE TO THE NEXT LEVEL: %d"
                  , level, limit, requiredScore);
 
+        /* there are only 6 levels, and level 6 is a free play level. Thus
+         * there will be no more levels after level 6
+         */
         if(level == 6){
             mvprintw(9, 0, "WELCOME TO LEVEL 6. LOOKS LIKE NO ONE HAS EVER"
                      " MADE IT HERE! CONGRATS! ");
@@ -314,6 +394,7 @@ int levelup(struct saucer saucer[])
                      " TERMINATE AS SOON AS YOU RUN OF OUT ROCKETS.");
         }
         
+        /* ask the user if he wants to buy some rockets*/
         mvprintw(11, 0,
                  "Would you like to buy some extra rockets from the store?"
                  "(Y/N)\n"
@@ -321,6 +402,7 @@ int levelup(struct saucer saucer[])
 
         refresh();
 
+        /* handle user input */
         while((c = getch()) != EOF){
             if(c == 'N') 
                     break;
@@ -337,6 +419,7 @@ int levelup(struct saucer saucer[])
         move(0,0);
         refresh();
 
+        /* re-position the launcher */
         move(LINES-2, ((COLS+1)/2));
         addch(' ');
         addch('|');
@@ -344,6 +427,7 @@ int levelup(struct saucer saucer[])
         move(LINES-1, COLS-1);
         refresh();
 
+        /* print the status line */
         mvprintw(LINES-1,
                  0,
                  "Pause(P) Resume(R)"
@@ -353,8 +437,9 @@ int levelup(struct saucer saucer[])
         done = 1;
         pthread_mutex_unlock(&mx);
         return NUMS;
-        }
+}
 
+/* move the rocket upward */
 void moveRocket(struct rocket *rocket)
 {
         pthread_mutex_lock(&mx);
@@ -365,6 +450,7 @@ void moveRocket(struct rocket *rocket)
         return;
 }
 
+/* dispose the rocket by eliminating it from screen */
 void disposeRocket(struct rocket *rocket)
 {
         move( rocket->row, rocket->col);
@@ -373,7 +459,8 @@ void disposeRocket(struct rocket *rocket)
         return;
 }
 
-void hitReward(int countHits){
+void hitReward(int countHits)
+{
         
         pthread_mutex_lock(&sc);
         score += countHits * level;
@@ -564,7 +651,8 @@ void lockEverything()
         gamepause = 1;
 }
 
-void unlockEverything(){
+void unlockEverything()
+{
         pthread_mutex_unlock(&mx);
         pthread_mutex_unlock(&rk);
         pthread_mutex_unlock(&es);
@@ -667,14 +755,47 @@ int gameOn(){
         return over;
 }
 
+
+void recordHighscore(){
+        char* name;
+        struct highscore highscore;
+
+        highscore = populate();
+        if(highscore.count ==  0)
+                mvprintw(7, 0, "No Highscores!");
+        
+        if(highscore.count > 0){
+            mvprintw(7,0,"%40s", "***       HIGH SCORE      ***\n");
+            mvprintw(8,0,"%20s | %20s\n", "User Name", "Score");
+            mvprintw(9,0,"%20s | %20s\n", highscore.p1, highscore.s1);
+        }
+
+        if(highscore.count > 1)
+                mvprintw(10,0,"%20s | %20s\n", highscore.p2, highscore.s2);
+
+        if(highscore.count > 2)
+                mvprintw(11,0,"%20s | %20s\n", highscore.p3, highscore.s3);
+
+        refresh();
+
+        if(highscore.count == 0 || score >= lowestHighscore()){
+                mvprintw(12,0,"You score is %d. Please Enter Your username "
+                         "(Max 20 characters):", score);
+
+                refresh();
+                name = malloc(20);
+                mvscanw(13,0,"%20s", name);
+                writeNewHighscore(score, name);
+                
+        }
+}
+
 int main()
 {
 	int c;		
 	int num_msg ;
 	int i;
         int over;
-        char* name;
-        struct highscore highscore;
 
         printUserMenu();
         printInstruction();
@@ -740,36 +861,7 @@ int main()
                 "  ####  #    # #    # ######     ####    ##   ###### "
                 "#    #  \n");
         refresh();
-        //sleep(1);
-
-        highscore = populate();
-        if(highscore.count ==  0)
-                mvprintw(7, 0, "No Highscores!");
-
-        if(highscore.count > 0){
-            mvprintw(7,0,"%40s", "***       HIGH SCORE      ***\n");
-            mvprintw(8,0,"%20s | %20s\n", "User Name", "Score");
-            mvprintw(9,0,"%20s | %20s\n", highscore.p1, highscore.s1);
-        }
-
-        if(highscore.count > 1)
-                mvprintw(10,0,"%20s | %20s\n", highscore.p2, highscore.s2);
-
-        if(highscore.count > 2)
-                mvprintw(11,0,"%20s | %20s\n", highscore.p3, highscore.s3);
-
-        refresh();
-
-        if(highscore.count == 0 || score >= lowestHighscore()){
-                mvprintw(12,0,"You score is %d. Please Enter Your username "
-                         "(Max 20 characters):", score);
-
-                refresh();
-                name = malloc(20);
-                mvscanw(13,0,"%20s", name);
-                writeNewHighscore(score, name);
-                
-        }
+        recordHighscore();
         endwin();
 
         pthread_mutex_unlock(&mx);
