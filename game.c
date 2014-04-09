@@ -1,9 +1,25 @@
+/*  Copyright (C) 2014 Alice (Mingxun) Wu
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>
+*/
+
 /* game.c
  *   This is the main game file, which contains threads and managers
  *   threads for rockets, saucers.
  *
  *   Main game:
- *     getLimit()      : get the limit of escaped rockests for each level
+ *     getLimit()      : get the limit of escaped rockets for each level
  *     getReward()     : get the reward value for each correct shot in each 
  *                       level
  *     levelUpLimit()  : get the limit of scores for user to level up
@@ -12,7 +28,7 @@
  *     updateSetting() : update all information like limit, score, rocket in 
  *                       level up process
  *     gameOn()        : the game function that runs in each level
- *     setup()         : setup function initializes necessary varialbes for game
+ *     setup()         : setup function initializes necessary variables for game
  *                       to start
  *     moveLeft()      : move launcher to left
  *     moveRight()     : move launcher to right
@@ -177,6 +193,8 @@ void printInstruction()
                "| As soon as you level up, you could choose to buy extra    |\n"
                "| rockets by trading some scores in the game store.         |\n"
                "+-----------------------------------------------------------+\n"
+               "| * For best performance, please use 80*20 screen           |\n"
+               "+-----------------------------------------------------------+\n"
                 );
         return;
 }
@@ -187,6 +205,8 @@ void printUserMenu()
         printf("Welcome to kill-that-saucer game\n");
         printf("================================\n");
         printf("|       Start Game (S)         |\n");
+        printf("+------------------------------+\n");
+        printf("|      Instruction (I)         |\n");
         printf("+------------------------------+\n");
         printf("|       High Score (H)         |\n");
         printf("+------------------------------+\n");
@@ -459,6 +479,9 @@ void disposeRocket(struct rocket *rocket)
         return;
 }
 
+/* reward the user with a number of rockets and scores depending on how
+ * many saucers a rocket has hit
+ */
 void hitReward(int countHits)
 {
         
@@ -474,16 +497,25 @@ void hitReward(int countHits)
         return;
 }
 
+/*
+ * The function that runs in each rocket thread
+ */
 void *fire(void *arg)
 {
         struct rocket *rocket = arg;
         int dispose = 0;
         int countHits = 0;
 
-        while (rocket->row >= 0){
+        /* keep the rocket moving and while the rocket has not escaped */
+        while (rocket->row >= 0 && !gameover){
+
+            /* rocket movement */
             usleep(rocket->speed*TUNIT);
             moveRocket(rocket);
             
+            /* when rocket is in saucer area, detect if the rocket is hitting
+             * any saucers
+             */
             if(rocket->row < ROWS){
                 int i;
                 countHits = 0;
@@ -504,11 +536,13 @@ void *fire(void *arg)
                 pthread_mutex_unlock(&rk); 
             }
 
+            /* if the rocket hits a saucer, then reward the user */
             if(countHits > 0)
                     hitReward(countHits);
             
+            /* if need to dispose the rocket, then dispose it*/
             pthread_mutex_lock(&mx);
-            if(dispose){
+            if(dispose || gameover){
                 disposeRocket(rocket);
                 pthread_mutex_unlock(&mx);
                 break;
@@ -528,11 +562,14 @@ void *fire(void *arg)
         pthread_exit(NULL);
 }
 
+/* the function that spawns a new saucer but based on an old thread */
 void spawn(struct saucer *info)
 {
+        /* change the live variable*/
         pthread_mutex_lock(&rk);
         info->live = 0;
 
+        /* restore the saucer's value after it's hit*/
         if(info->hit){
             info->hit = 0;
             pthread_mutex_lock(&mx);
@@ -547,16 +584,23 @@ void spawn(struct saucer *info)
         }else{
             pthread_mutex_lock(&es);
             escape++;
+
+            /* if escape limit has been reached, then game is over */
+            if(limit > 0 && escape >= limit)
+                    gameover = 1;
             pthread_mutex_unlock(&es);
             updateStatus();
         }
         
+        /* position the saucer back to the left of the screen */
         info->col = 0;
         info->row = rand()%ROWS;
         pthread_mutex_unlock(&rk);
         
+        /* let the saucer sleep for a while before it's ready to appear again*/
         usleep(info->delay * (rand()%RANGE) * TUNIT);
     
+        /* spawn process is done*/
         pthread_mutex_lock(&rk);
         info->live = 1;
         pthread_mutex_unlock(&rk);
@@ -565,6 +609,7 @@ void spawn(struct saucer *info)
 
 }
 
+/* vanish function makes the saucer escape the screen character by character*/
 int vanish(struct saucer *info, int count)
 {
         if (count == 0)
@@ -578,6 +623,7 @@ int vanish(struct saucer *info, int count)
         else if (count == 4)
                 info->str = ""; 
 
+        /* move the saucer */
         pthread_mutex_lock(&mx);
         move( info->row, info->col );
         addch(' ');
@@ -590,6 +636,7 @@ int vanish(struct saucer *info, int count)
         return ++count;
 }
 
+/* move the saucer from left to right */
 void moveSaucer(struct saucer *info)
 {
         pthread_mutex_lock(&mx);	
@@ -639,7 +686,7 @@ void *attack(void *arg)
 	}
 }
 
-
+/* lock everything to pause the game */
 void lockEverything()
 {
         pthread_mutex_lock(&mx);
@@ -651,6 +698,7 @@ void lockEverything()
         gamepause = 1;
 }
 
+/* unlock every mutex in order to resume the game */
 void unlockEverything()
 {
         pthread_mutex_unlock(&mx);
@@ -663,12 +711,12 @@ void unlockEverything()
 
 }
 
-int gameOn(){
-	int c;
-        int over = 0;
+/* the input thread function that handles user input*/
+void *inputHandler(){
+
+        int c;
         int i = 0;
 
-        /* process user input*/
 	while(1) {
             
             c = getch();
@@ -676,7 +724,8 @@ int gameOn(){
             if ( c == 'Q' ){
                 for (i=0; i<NUMS; i++ )
                         pthread_cancel(thrds[i]);
-                return 1;
+                gameover = 1;
+                pthread_exit(NULL);
             }
             
             else if (c == 'P' && !gamepause){
@@ -687,33 +736,10 @@ int gameOn(){
                 unlockEverything();
                 continue;
             }
-            
             if(gamepause)
                     continue;
 
-            pthread_mutex_lock(&dc);
-            pthread_mutex_lock(&es);
-            if(rockets == 0 || (limit > 0 && escape >= limit)){
-                over = 1;
-                break;
-            }
-
-            pthread_mutex_unlock(&es);
-            pthread_mutex_unlock(&dc);
-            
-            pthread_mutex_lock(&sc);
-            pthread_mutex_lock(&lv);
-            if(level < 6 && score >= requiredScore){
-                level++;
-                done = 0;
-                erase();
-                refresh();
-                break;
-            }
-            pthread_mutex_unlock(&sc);
-            pthread_mutex_unlock(&lv);
-
-            if ( c == '.')
+           if ( c == '.')
                     moveRight();
             
             else if ( c == ',')
@@ -735,11 +761,42 @@ int gameOn(){
                 
                 pthread_mutex_lock(&dc);
                 rockets--;
-                if(rockets == 0)
-                        return 1;
+                if(rockets == 0){
+                    gameover = 1;
+                    pthread_exit(NULL);
+                }
                 pthread_mutex_unlock(&dc);
                 updateStatus();
             }
+        }
+}
+
+/* function that monitors current game status, to determine whether
+ * to stop a game or not
+ */
+int gameOn(){
+        int over = 0;
+
+        /* process user input*/
+	while(1) {
+            
+            if(gameover){
+                pthread_cancel(inputThread);
+                return 1;
+            }
+
+            pthread_mutex_lock(&sc);
+            pthread_mutex_lock(&lv);
+            if(level < 6 && score >= requiredScore){
+                level++;
+                done = 0;
+                erase();
+                refresh();
+                pthread_cancel(inputThread);
+                break;
+            }
+            pthread_mutex_unlock(&sc);
+            pthread_mutex_unlock(&lv);
 
 	}
 
@@ -747,20 +804,19 @@ int gameOn(){
          * mutexes may be still locked. So doing the unlock
          * steps just to be safe.
          */
-        pthread_mutex_unlock(&es);
-        pthread_mutex_unlock(&dc);
         pthread_mutex_unlock(&sc);
         pthread_mutex_unlock(&lv);
 
         return over;
 }
 
-
+/* the function that is respsonsible for recording new highscore*/
 void recordHighscore(){
-        char* name;
+        char* name = "default";
         struct highscore highscore;
 
         highscore = populate();
+
         if(highscore.count ==  0)
                 mvprintw(7, 0, "No Highscores!");
         
@@ -778,14 +834,15 @@ void recordHighscore(){
 
         refresh();
 
+        /* prompting for user name*/
         if(highscore.count == 0 || score >= lowestHighscore()){
                 mvprintw(12,0,"You score is %d. Please Enter Your username "
                          "(Max 20 characters):", score);
-
                 refresh();
                 name = malloc(20);
                 mvscanw(13,0,"%20s", name);
                 writeNewHighscore(score, name);
+                endwin();
                 
         }
 }
@@ -797,9 +854,10 @@ int main()
 	int i;
         int over;
 
+        /* user menu */
         printUserMenu();
-        printInstruction();
 
+        /* handle user choice for user menu*/
         while((c = getchar()) != EOF){
             if(c == 'Q') 
                     return 0;
@@ -807,26 +865,38 @@ int main()
                     break;
             else if(c == 'H')
                     printHighscore();
+            else if(c == 'I')
+                    printInstruction();
         }
         
+        /* game phase*/
         while(1){
 
+            /* on level 1, do setup(), otherwise do levelup()*/
             if(level == 1 && !done){
                 num_msg = setup(saucer);
-
-                
+             
             }else if(level > 1 && level < 6 && !done){
                 num_msg = levelup(saucer);
             }
-
+            
+            /* create saucer thread */
             for(i=0 ; i<num_msg; i++)
                     if ( pthread_create(&thrds[i], NULL, attack, &saucer[i])){
                         fprintf(stderr,"error creating thread");
                             endwin();
                             exit(0);
                     }
+
+            /* create input thread */
+            pthread_create(&inputThread, NULL, inputHandler, NULL);
+            
+            /* gameOn is a function that monitors if the game could levelup or 
+             * the game should stop
+             */
             over = gameOn();
 
+            /* cancel all saucer threads*/
             for (i=0; i<num_msg; i++ )
                     pthread_cancel(thrds[i]);
             
@@ -862,8 +932,5 @@ int main()
                 "#    #  \n");
         refresh();
         recordHighscore();
-        endwin();
-
         pthread_mutex_unlock(&mx);
-        return 0;
 }
