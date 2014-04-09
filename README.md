@@ -11,10 +11,12 @@ User Documentation
 	When the game stops, the high score board would be printed out. If the player’s final score is high enough to be recorded into the high score board, then the game would prompt for the player’s username and write the new record.
 
 Developer Documentation
+=======================
 Code Structure
-OVERALL STRUCTURE:
+--------------
+<b>OVERALL STRUCTURE:</b>
 
-highscore.h:
+<b>highscore.h:</b>
 	The header file of the highscore.c, which is responsible for printing and editing the high score board.
 	In highscore.h, a struct highscore is used as the high score board, which has three rows. It’s shown as below:
 struct highscore{
@@ -28,7 +30,7 @@ struct highscore{
 };	
 	And also, functions that required by printing the high score board and modifying the high score board are declared in this header file.
 
-highscore.c:
+<b>highscore.c:</b>
 	This file is responsible for all behaviours of a high score board: populating the score board with information from a file, adding new score and new username to the board, printing the score board out to the screen.
  * highscore.c
  * printStruct()     	: print a highscore struct in three lines 
@@ -40,12 +42,12 @@ highscore.c:
  * writeHighscore()  	: add new highscore record to high score board
 
 
-game.h:
+<b>game.h:</b>
 	The header file for the backbone of this saucer game. In game.h, basic functions are declared and the all global mutex and variables and import structures are declared as well.
 
-IMPORTANT DATA STRUCTURES:
+<b>IMPORTANT DATA STRUCTURES:
 
-Saucer:
+<b>Saucer:</b>
 	Each saucer is a struct type variable which consists of multiple necessary values and is shown as below.
 struct	saucer {
         char *str;	   /* the string represents the appearance of a saucer, which should be <			               —->*/
@@ -57,14 +59,14 @@ struct	saucer {
 
 };
 
-Rocket:
+<b>Rocket:</b>
 struct rocket {
         int speed;   /* speed determins the time between each move*/
         int row;     /* the row indicates the row number of the rocket*/
         int col;    /* the col indicates the column number of the rocket*/
 };
 
-game.c:
+<b>game.c:</b>
 	The game.c files contains all implementation of declared functions in game.h, and the main function is responsible for running the game.
  *   Main game:
  *     getLimit()              : get the limit of escaped rockets for each level
@@ -105,16 +107,16 @@ game.c:
  *                           	and put to spawn process.
 
 
-FLOW AND FUNCTIONALITIES:
+<b>FLOW AND FUNCTIONALITIES:</b>
 
-Start-Up:
+<b>Start-Up:</b>
 	Starting from the main function, printUserMenu() and printInstruction() would be called first so that the game could give the user a nice user interface which shows what options a player could take, and the instruction about how to play the game. Then the main function will be waiting for the player’s input. Depending on the input, if “H” is pressed, the high score board will be printed out and the main function will not stop prompting for the user input; else if “Q” is pressed, the game will be terminated; else the “S” is printed, this will lead to the break out from the loop of prompting for the user input and the first level of the game.
 
-Configuration Before Each Level:
+<b>Configuration Before Each Level:</b>
 	Before starting each level, configuration for the level will be done in setup() function if the level is one, otherwise it would be done in levelup() function. In the configuration phase, depending on the level, each saucer thread will be initialized with corresponding setting; the launcher will be placed in the centre in the second last line of the screen; status information: the number of available rockets, current score, the number of escaped rockets, the level will be displayed in the very last line of the screen. If current level is greater than 1, the game will print out the “level up message”, which is composed of an ascii work for “level up” and related information to the next level, for instance, the number of scores to the next level, the limit of escaped saucers; also the game store will become available to user and let the user decide if he/she needs to buy some rockets.
 	After configuring the screen and status information, saucer threads are created and assigned to *attack(void *arg) function, in which a saucer will appear from the very left of the screen and move towards the right edge of the screen by function moveSaucer(struct saucer *saucer). In order to make the escape of a saucer smoother, I make the saucer disappear character by character, and leaving bigger chance for the player to hit a saucer. 
 
-Game:
+<b>Game:</b>
 
 *Rocket:
 	In the game play,  a rocket thread is created dynamically once the user presses space. And the thread function would be *fire(void *arg), in which, before the rocket escapes the screen, it will move automatically by moveRocket(struct rocket *rocket) function, and when it’s in the saucer area, it will check if it hits a saucer. If successfully hitting a saucer, disposeRocket(struct rocket *rocket) will remove the rocket from the screen and hitReward(int countHits) will reward the player with a number of rockets and scores that varies as the number of hits varies.
@@ -126,19 +128,21 @@ Game:
 As soon as the score accumulates enough to enter the next level, the game play on current level will stop, and go to the configuration phase again.
 
 Threads
-Main thread:
+=======
+<b>Main thread:</b>
 	The main thread is responsible for handling the user input and running the game, including positioning the launcher, controlling gaming in each level, terminating the game when in need, the store mode between each level, and printing the high score board and instructions.
 
-Input thread:
+<b>Input thread:</b>
 	Input thread handles the input from the player during the game play.
 
-Saucer threads:
+<b>Saucer threads:</b>
 	Each saucer thread has a main function named attack that has multiple sub functions which will take control of the movement of a saucer, and its escape, and the spawn process after either it is hit or has escaped.
 
-Rocket threads:
+<b>Rocket threads:</b>
 	Each rocket thread will have a function that controls the movement of a rocket, a function that wipe the rocket off the screen once it hits a saucer. Additionally, a function named hitReward is responsible for adding scores and rewarding the player reasonable amount of rockets each time the rocket hits a saucer.
 
 Critical Sections
+=================
 There are  6 global mutex, which are:
 
 /* mutex for modifying window*/
@@ -177,6 +181,7 @@ int score = 0;    	  /* the score of current player*/
 	A saucer thread needs to modify the variable escape.
 
 Known Bugs:
+===========
 
-• Sometimes after entering the username in high score board, the player can’t resume to type in terminal normally. 
-• There could exists some latency in saucer movement rarely. It may look like the rocket is hitting the very edge of a saucer, however, because of the latency, the saucer actually has moved towards left and is not in the hitting range of the rocket, but it only appears to be hit. 
+	• Sometimes after entering the username in high score board, the player can’t resume to type in terminal normally. 
+	• There could exists some latency in saucer movement rarely. It may look like the rocket is hitting the very edge of a saucer, however, because of the latency, the saucer actually has moved towards left and is not in the hitting range of the rocket, but it only appears to be hit. 
