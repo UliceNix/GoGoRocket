@@ -1,4 +1,5 @@
 User Documentation
+==================
 	This is a single player shooting game, named “Saucer”.
 	To start the game, the player should change directory to game’s directory, then type in “./saucer” in the terminal window. 
 	After the welcome menu shows up, a player could choose to view the high score board by typing H, start the game by typing S, or quit the game by using Q. The instructions are printed when the play types I.
